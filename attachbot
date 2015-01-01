@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Receives a file piped to stdin, extracts any attached files and stores any
+# accepted file types in a directory named after today's date.
+# Launched by "~/.forward.postfix" containing "| /home/jennis/bin/filemail.sh"
+
+logfile="$HOME/logs/filemail.log"
+retain_lines=500
+
+function logsetup {
+    if [ -e $logfile ]; then
+        TMP=$(tail -n $retain_lines $logfile 2>/dev/null) && echo "${TMP}" > $logfile
+    else
+        touch $logfile
+    fi
+    exec > >(tee -a $logfile)
+    exec 2>&1
+}
+
+function log {
+    echo "[$(date)]: $*"
+}
+
+logsetup
+log "FileMail Start"
+
+# store files in the Unfiled directory
+targetdir="$HOME/ennisbrookfarm.com/owncloud/data/jennis/files/File Cabinet/Unfiled"
+
+# Unpack the files in the piped stdin to a tmpdir
+tmpdir=`mktemp --tmpdir="/tmp" -d "mailfile.XXXXXXXXX"`
+munpack -q -C $tmpdir
+
+# delete all the unacceptable files
+find "$tmpdir" -type f ! -iname "*.pdf" -print0 | xargs -0 -I '{}' /bin/rm "{}"
+
+# if there are no more files, clean up and exit
+if [ "$(ls -A $tmpdir)" ]; then
+
+  # if target dir does not exist, create it
+  if [ ! -d "$targetdir" ]; then
+    mkdir "$targetdir"
+  fi
+
+  # move all the remaining files creating numbered backups where collisions occur
+  mv --backup=numbered $tmpdir/* "$targetdir"
+fi
+
+# Clean up and exit
+rm -rf "$tmpdir"
+
+log "FileMail End"
